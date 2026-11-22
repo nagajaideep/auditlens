@@ -1,0 +1,18 @@
+# Azure DevOps equivalent of .github/workflows/ci.yml
+trigger: [main]
+pool: { vmImage: ubuntu-latest }
+variables: { AUDITLENS_MLFLOW__ENABLED: "false", MLFLOW_DISABLE_AGENT_HINT: "1" }
+steps:
+  - task: UsePythonVersion@0
+    inputs: { versionSpec: "3.11" }
+  - script: pip install -e ".[dev]" evidently
+    displayName: Install
+  - script: ruff check src tests dashboard
+    displayName: Lint
+  - script: pytest -q --junitxml=test-results.xml
+    displayName: Tests
+  - task: PublishTestResults@2
+    condition: always()
+    inputs: { testResultsFiles: test-results.xml }
+  - script: docker build -t auditlens:$(Build.BuildId) .
+    displayName: Docker build

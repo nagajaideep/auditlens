@@ -1,0 +1,19 @@
+name: Nightly train + batch score
+on:
+  schedule: [{ cron: "15 2 * * *" }]
+  workflow_dispatch:
+jobs:
+  nightly:
+    runs-on: ubuntu-latest
+    env: { MLFLOW_DISABLE_AGENT_HINT: "1" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+      - run: pip install -e ".[dev]" evidently
+      - name: Generate data (replace with a real PaySim download if you add KAGGLE secrets)
+        run: auditlens generate --rows 200000 && auditlens generate --rows 20000 --seed 99 --out data/new/today.csv
+      - run: auditlens train --trials 10
+      - run: auditlens batch --input data/new/today.csv
+      - uses: actions/upload-artifact@v4
+        with: { name: nightly-reports, path: reports/ }

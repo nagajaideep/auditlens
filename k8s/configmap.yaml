@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: auditlens-config, namespace: auditlens }
+data:
+  AUDITLENS_DATA__POSTGRES_URL: postgresql+psycopg2://auditlens:auditlens@postgres:5432/auditlens
+  AUDITLENS_GENAI__LLM_PROVIDER: auto
+  MLFLOW_DISABLE_AGENT_HINT: "1"
+---
+# Create the LLM key secret yourself (never commit it):
+#   kubectl -n auditlens create secret generic auditlens-secrets --from-literal=ANTHROPIC_API_KEY=...

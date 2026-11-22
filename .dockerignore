@@ -1,0 +1,10 @@
+.venv
+.git
+data
+mlruns
+mlflow.db
+reports
+logs
+artifacts/chroma
+**/__pycache__
+*.egg-info

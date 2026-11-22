@@ -1,0 +1,36 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      AUDITLENS_MLFLOW__ENABLED: "false"
+      MLFLOW_DISABLE_AGENT_HINT: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+      - name: Install
+        run: pip install -e ".[dev]" evidently
+      - name: Lint
+        run: ruff check src tests dashboard
+      - name: Data checks (schema + cleaning on synthetic data)
+        run: pytest tests/test_data.py -q
+      - name: Unit + integration tests
+        run: pytest -q
+      - name: RAG eval gate (offline baseline must stay >= 80%)
+        run: |
+          auditlens eval-rag | tee rag.json
+          python -c "import json;s=json.load(open('reports/rag_eval_summary.json'));assert s['accuracy']>=0.8,s"
+      - uses: actions/upload-artifact@v4
+        with: { name: reports, path: reports/ }
+
+  docker:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t auditlens:${{ github.sha }} .

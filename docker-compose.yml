@@ -1,0 +1,46 @@
+# Local stack: PostgreSQL (+pgvector), MLflow, the API, the dashboard and a one-shot trainer.
+#   docker compose up -d db mlflow
+#   docker compose run --rm trainer      # loads CSV into Postgres and trains
+#   docker compose up -d api dashboard
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment: { POSTGRES_USER: auditlens, POSTGRES_PASSWORD: auditlens, POSTGRES_DB: auditlens }
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data, ./sql:/docker-entrypoint-initdb.d:ro]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U auditlens"], interval: 5s, retries: 10 }
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.17.2
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:////mlflow/mlflow.db --default-artifact-root /mlflow/artifacts
+    ports: ["5000:5000"]
+    volumes: [mlflow:/mlflow]
+
+  trainer:
+    build: .
+    profiles: ["jobs"]
+    user: root
+    depends_on: { db: { condition: service_healthy } }
+    environment: &env
+      AUDITLENS_DATA__POSTGRES_URL: postgresql+psycopg2://auditlens:auditlens@db:5432/auditlens
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes: [./data:/app/data, ./artifacts:/app/artifacts, ./reports:/app/reports]
+    command: >
+      sh -c "test -f data/raw/paysim.csv || auditlens generate --rows 200000 &&
+             auditlens load-db && AUDITLENS_DATA__SOURCE=postgres auditlens train"
+
+  api:
+    build: .
+    ports: ["8000:8000"]
+    environment: *env
+    volumes: [./artifacts:/app/artifacts, ./logs:/app/logs]
+
+  dashboard:
+    build: .
+    command: streamlit run dashboard/app.py --server.port 8501 --server.address 0.0.0.0
+    ports: ["8501:8501"]
+    environment: *env
+    volumes: [./artifacts:/app/artifacts, ./logs:/app/logs, ./reports:/app/reports]
+
+volumes: { pgdata: {}, mlflow: {} }

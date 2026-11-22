@@ -1,0 +1,7 @@
+$schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
+name: auditlens-env
+image: <your-acr>.azurecr.io/auditlens:latest
+inference_config:
+  liveness_route: { port: 8000, path: /health }
+  readiness_route: { port: 8000, path: /health }
+  scoring_route: { port: 8000, path: /predict }

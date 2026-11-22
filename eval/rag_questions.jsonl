@@ -1,0 +1,25 @@
+{"id": "q01", "question": "What model risk score creates an alert?", "expected_source": "transaction_monitoring_policy.md", "key_facts": ["0.80"]}
+{"id": "q02", "question": "How quickly must a first-line analyst triage an alert?", "expected_source": "transaction_monitoring_policy.md", "key_facts": ["2 business days"]}
+{"id": "q03", "question": "What size of single transfer always creates an alert regardless of the model score?", "expected_source": "transaction_monitoring_policy.md", "key_facts": ["10,000,000"]}
+{"id": "q04", "question": "What happens if alert precision falls below 20% for two consecutive quarters?", "expected_source": "transaction_monitoring_policy.md", "key_facts": ["retrained", "recalibrated"]}
+{"id": "q05", "question": "What evidence does an analyst need before clearing an alert?", "expected_source": "transaction_monitoring_policy.md", "key_facts": ["invoice", "contract"]}
+{"id": "q06", "question": "What are the three conditions of the fraud triangle?", "expected_source": "fraud_risk_assessment.md", "key_facts": ["incentive", "opportunity", "rationalisation"]}
+{"id": "q07", "question": "Which fraud risks are presumed on every audit engagement?", "expected_source": "fraud_risk_assessment.md", "key_facts": ["revenue recognition", "management override"]}
+{"id": "q08", "question": "What is the minimum number of journal entries tested on every engagement?", "expected_source": "fraud_risk_assessment.md", "key_facts": ["25"]}
+{"id": "q09", "question": "Which characteristics make a journal entry selected for testing?", "expected_source": "fraud_risk_assessment.md", "key_facts": ["outside business hours", "round-number"]}
+{"id": "q10", "question": "Who must the engagement partner inform after a suspected fraud is identified, and how fast?", "expected_source": "fraud_risk_assessment.md", "key_facts": ["General Counsel", "1 business day"]}
+{"id": "q11", "question": "What benchmark percentage of profit before tax is used for overall materiality?", "expected_source": "materiality_and_sampling.md", "key_facts": ["5%"]}
+{"id": "q12", "question": "What range is performance materiality set within?", "expected_source": "materiality_and_sampling.md", "key_facts": ["50%", "75%"]}
+{"id": "q13", "question": "Below what threshold are misstatements treated as clearly trivial?", "expected_source": "materiality_and_sampling.md", "key_facts": ["5%"]}
+{"id": "q14", "question": "What sample size is required when testing a control that operates daily?", "expected_source": "materiality_and_sampling.md", "key_facts": ["25"]}
+{"id": "q15", "question": "Can data analytics replace sampling, and what must still happen for flagged items?", "expected_source": "materiality_and_sampling.md", "key_facts": ["100%", "followed up"]}
+{"id": "q16", "question": "How must changes to vendor bank details be approved?", "expected_source": "vendor_management_policy.md", "key_facts": ["two people"]}
+{"id": "q17", "question": "After how long without activity should a vendor be deactivated?", "expected_source": "vendor_management_policy.md", "key_facts": ["18 months"]}
+{"id": "q18", "question": "Is a vendor in a high-risk behavioural segment evidence of wrongdoing?", "expected_source": "vendor_management_policy.md", "key_facts": ["not evidence"]}
+{"id": "q19", "question": "What minimum ROC AUC and recall must a transaction risk model achieve before use?", "expected_source": "model_risk_management.md", "key_facts": ["0.90", "70%"]}
+{"id": "q20", "question": "What drift level forces the model owner to investigate?", "expected_source": "model_risk_management.md", "key_facts": ["30%", "50%"]}
+{"id": "q21", "question": "Can a transaction be concluded fraudulent from a model score alone?", "expected_source": "model_risk_management.md", "key_facts": ["model score alone"]}
+{"id": "q22", "question": "How often must models be re-validated?", "expected_source": "model_risk_management.md", "key_facts": ["annually"]}
+{"id": "q23", "question": "Within how many days after the audit report must the final engagement file be assembled?", "expected_source": "audit_documentation_policy.md", "key_facts": ["45 days"]}
+{"id": "q24", "question": "What must a workpaper record when data analytics or models are used?", "expected_source": "audit_documentation_policy.md", "key_facts": ["model version", "data source"]}
+{"id": "q25", "question": "What is the Firm's policy on cryptocurrency custody for clients?", "answerable": false}

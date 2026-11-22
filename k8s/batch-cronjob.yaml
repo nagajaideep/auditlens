@@ -1,0 +1,19 @@
+# Nightly batch scoring at 02:15 UTC: scores new rows in Postgres and writes transaction_scores.
+apiVersion: batch/v1
+kind: CronJob
+metadata: { name: auditlens-nightly-score, namespace: auditlens }
+spec:
+  schedule: "15 2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: batch
+              image: auditlens:latest
+              imagePullPolicy: IfNotPresent
+              command: ["auditlens", "batch", "--to-postgres"]
+              envFrom: [{ configMapRef: { name: auditlens-config } }]

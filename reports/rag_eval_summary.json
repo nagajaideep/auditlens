@@ -1,0 +1,10 @@
+{
+  "n": 25,
+  "accuracy": 0.92,
+  "retrieval_hit_rate": 1.0,
+  "citation_rate": 0.9583333333333334,
+  "mean_fact_coverage": 0.9166666666666666,
+  "unanswerable_declined": 1.0,
+  "model": "extractive",
+  "embedder": "tfidf-svd"
+}

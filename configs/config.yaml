@@ -1,0 +1,42 @@
+# AuditLens configuration. Every value can be overridden by an env var
+# named AUDITLENS_<SECTION>__<KEY> (e.g. AUDITLENS_DATA__SOURCE=postgres).
+data:
+  source: csv                     # csv | postgres
+  raw_csv: data/raw/paysim.csv    # PaySim CSV from Kaggle (or the synthetic generator)
+  processed: data/processed/transactions.parquet
+  postgres_url: postgresql+psycopg2://auditlens:auditlens@localhost:5432/auditlens
+  sample_rows: 1000000            # cap rows for laptop-sized training; null = all
+  seed: 42
+
+model:
+  dir: artifacts/models
+  test_size: 0.2
+  optuna_trials: 25
+  threshold_metric: f1            # threshold chosen on validation set to maximise this
+
+mlflow:
+  tracking_uri: sqlite:///mlflow.db   # docker-compose overrides with MLFLOW_TRACKING_URI
+  experiment: auditlens
+  registered_model: auditlens-fraud-model
+
+forecast:
+  freq: D                         # PaySim spans 30 days -> daily. Use MS for monthly data.
+  horizon: 7
+  method: sarima                  # sarima | prophet
+
+genai:
+  docs_dir: docs/policies
+  chroma_dir: artifacts/chroma
+  collection: audit_policies
+  embedder: auto                  # auto | sentence-transformers | tfidf
+  embed_model: sentence-transformers/all-MiniLM-L6-v2
+  llm_provider: auto              # auto | anthropic | azure_openai | openai | extractive
+  anthropic_model: claude-opus-5-5
+  top_k: 4
+  chunk_size: 900
+  chunk_overlap: 150
+
+monitoring:
+  reference: artifacts/monitoring/reference.parquet
+  request_log: logs/requests.jsonl
+  drift_report: reports/drift_report.html

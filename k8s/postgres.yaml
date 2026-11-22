@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: { name: postgres, namespace: auditlens }
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector: { matchLabels: { app: postgres } }
+  template:
+    metadata: { labels: { app: postgres } }
+    spec:
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:pg16
+          env:
+            - { name: POSTGRES_USER, value: auditlens }
+            - { name: POSTGRES_PASSWORD, value: auditlens }   # demo only; use a Secret in real deployments
+            - { name: POSTGRES_DB, value: auditlens }
+          ports: [{ containerPort: 5432 }]
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec: { accessModes: [ReadWriteOnce], resources: { requests: { storage: 5Gi } } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: postgres, namespace: auditlens }
+spec:
+  selector: { app: postgres }
+  ports: [{ port: 5432 }]
