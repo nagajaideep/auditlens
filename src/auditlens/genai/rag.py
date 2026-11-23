@@ -49,7 +49,7 @@ class RAGPipeline:
         store.add(chunks, E)
         if persist and isinstance(store, MemoryStore):
             store.save(resolve(cfg["chroma_dir"]) / "memory")
-        return cls(store, emb, llm or get_llm(cfg["llm_provider"], cfg["anthropic_model"]), cfg["top_k"])
+        return cls(store, emb, llm or get_llm(cfg["llm_provider"], cfg.get("gemini_model")), cfg["top_k"])
 
     def retrieve(self, question: str):
         q = self.embedder.encode([question])[0]

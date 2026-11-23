@@ -1,125 +1,127 @@
 {
-  "rows": 500000,
-  "fraud_cases": 2000,
+  "rows": 6362620,
+  "fraud_cases": 8213,
   "best_model": "random_forest",
-  "model_version": "random_forest-v4",
+  "model_version": "random_forest-v2",
   "test": {
     "precision": 1.0,
-    "recall": 0.9974,
-    "f1": 0.9987,
+    "recall": 0.9972,
+    "f1": 0.9986,
     "roc_auc": 1.0,
     "pr_auc": 1.0,
-    "threshold": 0.4433,
-    "tp": 388,
+    "threshold": 0.8233,
+    "tp": 4242,
     "fp": 0,
-    "fn": 1,
-    "tn": 99611
+    "fn": 12,
+    "tn": 1268270
   },
   "comparison": [
     {
       "model": "random_forest",
       "precision": 1.0,
-      "recall": 0.9974,
-      "f1": 0.9987,
+      "recall": 0.9972,
+      "f1": 0.9986,
       "roc_auc": 1.0,
       "pr_auc": 1.0,
-      "threshold": 0.4433,
+      "threshold": 0.8233,
+      "val_pr_auc": 1.0
+    },
+    {
+      "model": "xgboost_default",
+      "precision": 1.0,
+      "recall": 0.9937,
+      "f1": 0.9968,
+      "roc_auc": 1.0,
+      "pr_auc": 0.9999,
+      "threshold": 1.0,
       "val_pr_auc": 1.0
     },
     {
       "model": "xgboost_optuna",
-      "precision": 0.9773,
-      "recall": 0.9974,
-      "f1": 0.9873,
+      "precision": 1.0,
+      "recall": 0.9946,
+      "f1": 0.9973,
       "roc_auc": 1.0,
-      "pr_auc": 0.9998,
-      "threshold": 0.441,
-      "val_pr_auc": 0.9998
-    },
-    {
-      "model": "xgboost_default",
-      "precision": 0.9898,
-      "recall": 0.9949,
-      "f1": 0.9923,
-      "roc_auc": 1.0,
-      "pr_auc": 0.9997,
-      "threshold": 0.9535,
-      "val_pr_auc": 0.9995
+      "pr_auc": 0.9999,
+      "threshold": 1.0,
+      "val_pr_auc": 1.0
     },
     {
       "model": "logreg",
-      "precision": 0.9497,
-      "recall": 0.3882,
-      "f1": 0.5511,
-      "roc_auc": 0.9916,
-      "pr_auc": 0.5383,
-      "threshold": 1.0,
-      "val_pr_auc": 0.5328
+      "precision": 0.9585,
+      "recall": 0.8082,
+      "f1": 0.8769,
+      "roc_auc": 0.9969,
+      "pr_auc": 0.9188,
+      "threshold": 0.9912,
+      "val_pr_auc": 0.7772
     }
   ],
   "anomaly": {
-    "roc_auc": 0.9942,
-    "pr_auc": 0.5812,
-    "flag_rate": 0.0076,
-    "fraud_captured": 0.6992,
-    "precision_of_flags": 0.3593
+    "roc_auc": 0.9947,
+    "pr_auc": 0.6726,
+    "flag_rate": 0.0031,
+    "fraud_captured": 0.6251,
+    "precision_of_flags": 0.6785
   },
-  "forecast_weighted_mape": 3.241329587948886,
+  "forecast_weighted_mape": 79.04194162102654,
+  "forecast_median_mape": 11.716862907165341,
   "forecast": [
     {
       "group": "CASH_IN",
-      "mape": 2.314,
-      "naive_mape": 1.525,
-      "actual_total": 6149074845.66,
-      "forecast_total": 6048424766.082
+      "mape": 5.123,
+      "naive_mape": 5.948,
+      "actual_total": 60751365327.53,
+      "forecast_total": 59173020163.698
     },
     {
       "group": "CASH_OUT",
-      "mape": 1.541,
-      "naive_mape": 1.329,
-      "actual_total": 10590367821.75,
-      "forecast_total": 10501886387.28
+      "mape": 3.956,
+      "naive_mape": 8.602,
+      "actual_total": 98297916747.72,
+      "forecast_total": 98724892204.064
     },
     {
       "group": "DEBIT",
-      "mape": 16.297,
-      "naive_mape": 21.404,
-      "actual_total": 9449229.57,
-      "forecast_total": 9924228.307
+      "mape": 11.717,
+      "naive_mape": 21.907,
+      "actual_total": 60710004.84,
+      "forecast_total": 53471620.234
     },
     {
       "group": "PAYMENT",
-      "mape": 1.946,
-      "naive_mape": 2.31,
-      "actual_total": 737153388.99,
-      "forecast_total": 749234145.48
+      "mape": 22.878,
+      "naive_mape": 19.555,
+      "actual_total": 8245754853.84,
+      "forecast_total": 6801254251.123
     },
     {
       "group": "TRANSFER",
-      "mape": 5.271,
-      "naive_mape": 3.803,
-      "actual_total": 12090187768.0,
-      "forecast_total": 11443464659.233
+      "mape": 160.06,
+      "naive_mape": 38.166,
+      "actual_total": 152294653492.12,
+      "forecast_total": 367360372550.521
     }
   ],
   "vendor_clusters": {
-    "k": 3,
-    "silhouette": 0.21751828704452209,
+    "k": 4,
+    "silhouette": 0.2636099662296756,
     "labels": {
-      "0": "big-spikes / large-ticket",
-      "1": "low-big / low-large",
-      "2": "low-many / high-volume"
+      "0": "few-cash-outs / sporadic",
+      "1": "cash-out-heavy / few-transfers",
+      "2": "always-active / high-volume",
+      "3": "big-spikes / erratic-amounts"
     }
   },
   "top_shap_features": {
-    "err_balance_orig": 0.1278,
-    "err_balance_dest": 0.1113,
-    "amount_to_balance": 0.0838,
-    "dest_is_merchant": 0.0456,
-    "type_PAYMENT": 0.0435,
-    "type_CASH_OUT": 0.0362,
-    "oldbalanceOrg": 0.0339,
-    "dest_zero_balances": 0.0176
+    "err_balance_orig": 0.1826,
+    "orig_emptied": 0.1121,
+    "amount_to_balance": 0.0936,
+    "newbalanceOrig": 0.0637,
+    "oldbalanceOrg": 0.0277,
+    "dest_is_merchant": 0.0209,
+    "type_PAYMENT": 0.0187,
+    "amount": 0.0135
   },
   "fpr_disparity": [
     {
@@ -147,5 +149,5 @@
       "ratio": NaN
     }
   ],
-  "seconds": 236.5
+  "seconds": 1728.3
 }

@@ -21,23 +21,31 @@ def engine(url: str | None = None):
     return create_engine(url or get_config()["data"]["postgres_url"])
 
 
-def csv_to_postgres(csv_path: str | Path, url: str | None = None, chunksize: int = 200_000) -> int:
-    """Stream a PaySim CSV into the `transactions_raw` table (see sql/schema.sql)."""
+COPY_COLS = "step, type, amount, nameorig, oldbalanceorg, newbalanceorig, namedest, oldbalancedest, " \
+            "newbalancedest, isfraud, isflaggedfraud"
+
+
+def csv_to_postgres(csv_path: str | Path, url: str | None = None) -> int:
+    """Bulk-load a PaySim CSV into `transactions_raw` (see sql/schema.sql) with PostgreSQL COPY.
+    6.3M rows load in about a minute, versus tens of minutes with row-by-row inserts."""
     from sqlalchemy import text
     eng = engine(url)
-    schema_sql = (resolve("sql/schema.sql")).read_text()
+    schema_sql = resolve("sql/schema.sql").read_text()
     with eng.begin() as conn:
         for stmt in [s for s in schema_sql.split(";") if s.strip()]:
             conn.execute(text(stmt))
-        conn.execute(text("TRUNCATE transactions_raw"))
-    total = 0
-    rename = {c: c.lower() for c in ["step", "type", "amount", "nameOrig", "oldbalanceOrg", "newbalanceOrig",
-                                     "nameDest", "oldbalanceDest", "newbalanceDest", "isFraud", "isFlaggedFraud"]}
-    for chunk in pd.read_csv(csv_path, chunksize=chunksize):
-        chunk = chunk.rename(columns=rename)
-        chunk.to_sql("transactions_raw", eng, if_exists="append", index=False, method="multi", chunksize=10_000)
-        total += len(chunk)
-        log_event(log, "loaded chunk", rows=total)
+        conn.execute(text("TRUNCATE transactions_raw RESTART IDENTITY"))
+    raw = eng.raw_connection()
+    try:
+        with raw.cursor() as cur, open(csv_path) as fh:
+            cur.copy_expert(f"COPY transactions_raw ({COPY_COLS}) FROM STDIN WITH (FORMAT csv, HEADER true)", fh)
+            cur.execute("ANALYZE transactions_raw")
+            cur.execute("SELECT COUNT(*) FROM transactions_raw")
+            total = cur.fetchone()[0]
+        raw.commit()
+    finally:
+        raw.close()
+    log_event(log, "loaded into postgres", rows=total)
     return total
 
 

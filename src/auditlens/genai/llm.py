@@ -1,9 +1,7 @@
 """LLM client abstraction. Providers:
-  anthropic     - Claude via the official Anthropic SDK (ANTHROPIC_API_KEY)
-  azure_openai  - Azure OpenAI deployment (AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_API_KEY, AZURE_OPENAI_DEPLOYMENT)
-  openai        - OpenAI API (OPENAI_API_KEY, OPENAI_MODEL)
-  extractive    - no LLM: returns the most relevant sentences from the context (offline / CI)
-'auto' picks the first provider whose credentials are present, else extractive."""
+  gemini      - Google Gemini via the google-genai SDK (GEMINI_API_KEY, optional GEMINI_MODEL)
+  extractive  - no LLM: returns the most relevant sentences from the context (offline / CI)
+'auto' uses Gemini when GEMINI_API_KEY (or GOOGLE_API_KEY) is set, else extractive."""
 from __future__ import annotations
 
 import os
@@ -21,49 +19,26 @@ class BaseLLM:
         raise NotImplementedError
 
 
-class AnthropicLLM(BaseLLM):
-    def __init__(self, model: str = "claude-opus-5-5"):
-        import anthropic
-        self.client = anthropic.Anthropic()
-        self.model = model
-        self.name = f"anthropic:{model}"
+class GeminiLLM(BaseLLM):
+    def __init__(self, model: str | None = None):
+        from google import genai
+        self.client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+        self.model = model or os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+        self.name = f"gemini:{self.model}"
 
     def complete(self, system: str, user: str, max_tokens: int = 2000) -> str:
-        # Server-side fallback re-runs the request on another model if a safety
-        # classifier declines it; effort=low keeps short Q&A cheap and fast.
-        resp = self.client.beta.messages.create(
+        from google.genai import types
+        resp = self.client.models.generate_content(
             model=self.model,
-            max_tokens=max_tokens,
-            betas=["server-side-fallback-2026-07-01"],
-            fallbacks="default",
-            output_config={"effort": "low"},
-            system=system,
-            messages=[{"role": "user", "content": user}],
+            contents=user,
+            config=types.GenerateContentConfig(system_instruction=system, max_output_tokens=max_tokens,
+                                               temperature=0.1),
         )
-        if resp.stop_reason == "refusal":
-            raise LLMError("The model declined to answer this request.")
-        return "".join(b.text for b in resp.content if b.type == "text").strip()
-
-
-class OpenAICompatLLM(BaseLLM):
-    def __init__(self, azure: bool = False):
-        if azure:
-            from openai import AzureOpenAI
-            self.client = AzureOpenAI(azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-                                      api_key=os.environ["AZURE_OPENAI_API_KEY"],
-                                      api_version=os.environ.get("AZURE_OPENAI_API_VERSION", "2024-10-21"))
-            self.model = os.environ["AZURE_OPENAI_DEPLOYMENT"]
-        else:
-            from openai import OpenAI
-            self.client = OpenAI()
-            self.model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-        self.name = ("azure_openai:" if azure else "openai:") + self.model
-
-    def complete(self, system: str, user: str, max_tokens: int = 2000) -> str:
-        r = self.client.chat.completions.create(model=self.model, max_tokens=max_tokens,
-                                                messages=[{"role": "system", "content": system},
-                                                          {"role": "user", "content": user}])
-        return (r.choices[0].message.content or "").strip()
+        text = (resp.text or "").strip()
+        if not text:
+            raise LLMError(f"empty response from {self.model} (finish reason: "
+                           f"{resp.candidates[0].finish_reason if resp.candidates else 'unknown'})")
+        return text
 
 
 class ExtractiveLLM(BaseLLM):
@@ -102,18 +77,10 @@ def _template_narrative(user: str) -> str:
     return s + " An auditor should verify the counterparty and supporting documents before clearing it."
 
 
-def get_llm(provider: str = "auto", anthropic_model: str = "claude-opus-5-5") -> BaseLLM:
+def get_llm(provider: str = "auto", model: str | None = None) -> BaseLLM:
     if provider == "auto":
-        if os.environ.get("ANTHROPIC_API_KEY"):
-            provider = "anthropic"
-        elif os.environ.get("AZURE_OPENAI_API_KEY") and os.environ.get("AZURE_OPENAI_ENDPOINT"):
-            provider = "azure_openai"
-        elif os.environ.get("OPENAI_API_KEY"):
-            provider = "openai"
-        else:
-            provider = "extractive"
-    if provider == "anthropic":
-        return AnthropicLLM(anthropic_model)
-    if provider in ("azure_openai", "openai"):
-        return OpenAICompatLLM(azure=provider == "azure_openai")
+        has_key = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+        provider = "gemini" if has_key else "extractive"
+    if provider == "gemini":
+        return GeminiLLM(model)
     return ExtractiveLLM()

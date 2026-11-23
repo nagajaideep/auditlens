@@ -24,7 +24,7 @@ services:
     environment: &env
       AUDITLENS_DATA__POSTGRES_URL: postgresql+psycopg2://auditlens:auditlens@db:5432/auditlens
       MLFLOW_TRACKING_URI: http://mlflow:5000
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     volumes: [./data:/app/data, ./artifacts:/app/artifacts, ./reports:/app/reports]
     command: >
       sh -c "test -f data/raw/paysim.csv || auditlens generate --rows 200000 &&

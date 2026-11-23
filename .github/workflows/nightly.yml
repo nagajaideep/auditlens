@@ -11,9 +11,14 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.11", cache: pip }
       - run: pip install -e ".[dev]" evidently
-      - name: Generate data (replace with a real PaySim download if you add KAGGLE secrets)
-        run: auditlens generate --rows 200000 && auditlens generate --rows 20000 --seed 99 --out data/new/today.csv
-      - run: auditlens train --trials 10
+      - name: Get data (real PaySim when the KAGGLE_API_TOKEN secret is set, else synthetic)
+        env: { KAGGLE_API_TOKEN: "${{ secrets.KAGGLE_API_TOKEN }}" }
+        run: |
+          if [ -n "$KAGGLE_API_TOKEN" ]; then ./scripts/download_paysim.sh; else auditlens generate --rows 200000; fi
+          auditlens generate --rows 20000 --seed 99 --out data/new/today.csv
+      - name: Train
+        env: { AUDITLENS_DATA__SAMPLE_ROWS: "1000000" }
+        run: auditlens train --trials 10
       - run: auditlens batch --input data/new/today.csv
       - uses: actions/upload-artifact@v4
         with: { name: nightly-reports, path: reports/ }

@@ -20,8 +20,9 @@ mlflow:
   registered_model: auditlens-fraud-model
 
 forecast:
-  freq: D                         # PaySim spans 30 days -> daily. Use MS for monthly data.
-  horizon: 7
+  freq: D                         # PaySim spans 30 days -> daily spend. For multi-year ledgers use MS (monthly).
+  horizon: 4                      # hold out / forecast the last 4 days of the window
+  day_range: [5, 17]              # stable window: PaySim volume collapses after day 17 (null = all days)
   method: sarima                  # sarima | prophet
 
 genai:
@@ -30,8 +31,8 @@ genai:
   collection: audit_policies
   embedder: auto                  # auto | sentence-transformers | tfidf
   embed_model: sentence-transformers/all-MiniLM-L6-v2
-  llm_provider: auto              # auto | anthropic | azure_openai | openai | extractive
-  anthropic_model: claude-opus-5-5
+  llm_provider: auto              # auto | gemini | extractive (auto = gemini if GEMINI_API_KEY is set)
+  gemini_model: gemini-2.5-flash
   top_k: 4
   chunk_size: 900
   chunk_overlap: 150

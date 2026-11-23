@@ -79,12 +79,13 @@ def run(cfg: dict | None = None, raw: pd.DataFrame | None = None, n_trials: int 
 
         # ---- 4. forecasting
         fc_cfg = cfg["forecast"]
-        wide = spend_series(df, "type", fc_cfg["freq"])
+        wide = spend_series(df, "type", fc_cfg["freq"], fc_cfg.get("day_range"))
         bt = backtest(wide, fc_cfg["horizon"], fc_cfg["freq"], fc_cfg["method"])
         bt.to_csv(reports / "forecast_backtest.csv", index=False)
         wide.to_csv(reports / "spend_series.csv")
         fc_mape = float(np.average(bt["mape"], weights=bt["actual_total"])) if len(bt) else float("nan")
-        tracking.log_metrics({"forecast_weighted_mape": fc_mape})
+        fc_median = float(bt["mape"].median()) if len(bt) else float("nan")
+        tracking.log_metrics({"forecast_weighted_mape": fc_mape, "forecast_median_mape": fc_median})
 
         # ---- 5. explainability & error analysis
         sample = split.X_test.sample(min(3000, len(split.X_test)), random_state=seed)
@@ -123,14 +124,15 @@ def run(cfg: dict | None = None, raw: pd.DataFrame | None = None, n_trials: int 
             "vendor_segmenter": seg, "background": split.X_train.sample(min(500, len(split.X_train)), random_state=0),
             "spend_series": wide, "forecast_cfg": fc_cfg,
             "metrics": {"test": best["test"], "val": best["val"], "anomaly": anomaly_metrics,
-                        "forecast_weighted_mape": fc_mape, "kmeans_k": seg.k},
+                        "forecast_weighted_mape": fc_mape, "forecast_median_mape": fc_median, "kmeans_k": seg.k},
         }
         save_bundle(bundle)
 
         summary = {
             "rows": len(df), "fraud_cases": int(df.isFraud.sum()), "best_model": best_name,
             "model_version": model_version, "test": _clean(best["test"]), "comparison": table.round(4).to_dict("records"),
-            "anomaly": _clean(anomaly_metrics), "forecast_weighted_mape": fc_mape, "forecast": bt.round(3).to_dict("records"),
+            "anomaly": _clean(anomaly_metrics), "forecast_weighted_mape": fc_mape, "forecast_median_mape": fc_median,
+            "forecast": bt.round(3).to_dict("records"),
             "vendor_clusters": {"k": seg.k, "silhouette": seg.silhouettes.get(seg.k), "labels": seg.labels_},
             "top_shap_features": importance.head(8).round(4).to_dict(),
             "fpr_disparity": disp.round(4).reset_index().to_dict("records"),

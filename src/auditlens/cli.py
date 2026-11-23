@@ -38,7 +38,7 @@ def main(argv=None) -> None:
     elif args.cmd == "train":
         from auditlens.pipelines.train import run
         s = run(n_trials=args.trials)
-        print(json.dumps({k: s[k] for k in ["best_model", "model_version", "test", "forecast_weighted_mape"]},
+        print(json.dumps({k: s[k] for k in ["best_model", "model_version", "test", "forecast_weighted_mape", "forecast_median_mape"]},
                          indent=2, default=str))
     elif args.cmd == "batch":
         from auditlens.pipelines.batch_score import run

@@ -23,7 +23,7 @@ flowchart LR
   subgraph GenAI
     D --> CH[Chunk + embed<br/>MiniLM / TF-IDF] --> VS[(Chroma / pgvector)]
     VS --> R[RAG with citations]
-    LLM[Claude / Azure OpenAI<br/>/ extractive fallback] --> R
+    LLM[Gemini<br/>/ extractive fallback] --> R
     LLM --> N[Flag narratives]
   end
 

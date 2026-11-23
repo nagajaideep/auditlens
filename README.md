@@ -8,7 +8,7 @@ through a REST API with monitoring, CI and cloud deployment.
 ```text
 PaySim → PostgreSQL → Pandera checks → features → LogReg / RF / XGBoost (+Optuna) → SHAP
                                               ↘ Isolation Forest   ↘ K-Means vendors   ↘ SARIMA/Prophet
-Policy docs → chunks → embeddings → Chroma/pgvector → LLM with citations
+Policy docs → chunks → embeddings → Chroma/pgvector → Gemini answer with citations
 All runs → MLflow registry → FastAPI (/predict /forecast /ask) → Docker → minikube / Azure Container Apps
 Nightly batch + Evidently drift + JSON request logs → Streamlit dashboard
 ```
@@ -58,14 +58,14 @@ curl -s localhost:8000/ask -H 'content-type: application/json' -d '{"question": 
 ```
 
 ### LLM provider
-`genai.llm_provider: auto` uses the first provider it finds credentials for:
-`ANTHROPIC_API_KEY` (Claude), `AZURE_OPENAI_*` (Azure OpenAI), `OPENAI_API_KEY`. With none set it falls back
-to a local **extractive** mode that quotes the best-matching sentences with citations, so CI and offline demos
+Answers and flag narratives use **Google Gemini** (`gemini-2.5-flash` by default; change it with
+`GEMINI_MODEL` or `genai.gemini_model`). Put `GEMINI_API_KEY` in `.env`; get a free key at
+https://aistudio.google.com/apikey. Without a key the app falls back to a local **extractive** mode that quotes the best-matching sentences with citations, so CI and offline demos
 still work. Copy `.env.example` to `.env`.
 
 ### Real data
 ```bash
-export KAGGLE_USERNAME=... KAGGLE_KEY=...
+export KAGGLE_API_TOKEN=...              # kaggle.com/settings -> API -> Create New Token
 ./scripts/download_paysim.sh               # data/raw/paysim.csv (6.3M rows)
 docker compose up -d db                    # PostgreSQL 16 + pgvector
 auditlens load-db                          # CSV → transactions_raw
@@ -77,17 +77,37 @@ Add public documents (10-K filings, standards) with `scripts/fetch_public_docs.p
 
 ## Results
 
-Numbers from the **synthetic** demo dataset (500k rows, 25 Optuna trials). They only show that the pipeline
-runs end to end. Re-run on real PaySim before quoting anything (see the caveat in the model card).
+Real **PaySim** data: 6,362,620 transactions and 8,213 frauds (0.13%), loaded into PostgreSQL. The split is
+chronological: train on the first 64% of time, validate on the next 16%, test on the last 20%
+(1,272,524 transactions, 4,254 of them fraud).
 
-| Metric | Value |
+| Model (test set) | Precision | Recall | F1 | ROC-AUC | PR-AUC |
+|---|---|---|---|---|---|
+| **Random Forest** (selected by validation PR-AUC) | 1.000 | **0.997** | 0.999 | 1.000 | 1.000 |
+| XGBoost, tuned with Optuna (15 trials) | 1.000 | 0.993 | 0.997 | 1.000 | 1.000 |
+| XGBoost, default | 1.000 | 0.993 | 0.996 | 1.000 | 1.000 |
+| Logistic regression (baseline) | 0.958 | 0.808 | 0.877 | 0.997 | 0.919 |
+| PaySim's built-in `isFlaggedFraud` rule | 1.000 | 0.002 | 0.004 | – | – |
+
+The Random Forest catches 4,242 of 4,254 test frauds with no false positives.
+
+| Other modules | Result |
 |---|---|
-| Best classifier (by validation PR-AUC) | Random Forest: recall 0.997, precision 1.00, ROC-AUC 1.00 |
-| Logistic-regression baseline | recall 0.39, PR-AUC 0.54 |
-| Isolation Forest (no labels) | ROC-AUC 0.994, catches 70% of fraud while flagging 0.8% of transactions |
-| Daily spend forecast (SARIMA, 7-day holdout) | 3.2% weighted MAPE |
-| RAG, offline extractive baseline | 92% pass, 100% retrieval hit rate, 96% citation rate on 25 questions |
-| Batch scoring | 30k transactions in about 2.5 s on 4 CPU cores |
+| Isolation Forest (no labels used) | ROC-AUC 0.995; flags 0.31% of transactions, 68% of flags are fraud, and it catches 63% of all fraud |
+| K-Means vendor segments | 382,603 receiving accounts in 4 segments (silhouette 0.26). The "big-spikes / erratic-amounts" segment has 3.4% fraud exposure, against 0.6–1.4% for the others |
+| Spend forecast (SARIMA, 4-day holdout) | MAPE: CASH_OUT 4.0%, CASH_IN 5.1%, DEBIT 11.7%, PAYMENT 22.9%, TRANSFER 160% (median 11.7%). The model beats the seasonal-naive baseline on 3 of 5 groups |
+| Policy Q&A (25 questions, offline mode) | 92% pass, 100% retrieval hit rate, 96% citation rate, out-of-scope question correctly declined |
+| Batch scoring | 103,573 transactions scored in a few seconds on 4 CPU cores |
+
+**What the analysis shows:**
+- Fraud happens only in TRANSFER and CASH_OUT. The fraud rate is about 22% at 3–4am, versus under 0.1% during the day.
+- The strongest SHAP features are balance-reconciliation errors and the account-emptied flag.
+- The 12 missed frauds are large transfers (median 2.9M) that don't empty the sender's account.
+- Recall is lowest (77%) for senders whose opening balance is zero.
+- PaySim normal activity collapses after day 17, so forecasting uses days 5–17.
+
+PaySim is a simulator, and its fraud follows simple rules, which is why tree models are nearly perfect on it.
+Expect lower numbers on a real ledger (see `MODEL_CARD.md`).
 
 ## Deployment
 
@@ -95,7 +115,7 @@ runs end to end. Re-run on real PaySim before quoting anything (see the caveat i
 |---|---|
 | Docker Compose | `docker compose up -d db mlflow && docker compose run --rm trainer && docker compose up -d api dashboard` |
 | minikube | see [`k8s/README.md`](k8s/README.md) (2-replica API with HPA, Postgres StatefulSet, nightly CronJob) |
-| Azure Container Apps | `az login && ./deploy/azure/containerapps.sh`. Builds in ACR and scales to zero when idle, which suits student credits |
+| Azure Container Apps | `az login && GEMINI_API_KEY=... ./deploy/azure/containerapps.sh`. Builds in ACR and scales to zero when idle, which suits student credits |
 | Azure ML | [`deploy/azure/azureml/`](deploy/azure/azureml/README.md) managed online endpoint using the same image |
 
 Train before you build the image: `artifacts/models/bundle.joblib` is baked in.

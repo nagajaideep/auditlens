@@ -20,8 +20,8 @@ az containerapp env create -g "$RG" -n "$ENV_NAME" -l "$LOC"
 az containerapp create -g "$RG" -n "$APP" --environment "$ENV_NAME" \
   --image "$ACR.azurecr.io/auditlens:latest" --registry-server "$ACR.azurecr.io" \
   --target-port 8000 --ingress external --cpu 1.0 --memory 2.0Gi --min-replicas 0 --max-replicas 2 \
-  --secrets anthropic-key="${ANTHROPIC_API_KEY:-unset}" \
-  --env-vars ANTHROPIC_API_KEY=secretref:anthropic-key AUDITLENS_GENAI__LLM_PROVIDER=auto
+  --secrets gemini-key="${GEMINI_API_KEY:-unset}" \
+  --env-vars GEMINI_API_KEY=secretref:gemini-key AUDITLENS_GENAI__LLM_PROVIDER=auto
 
 URL=$(az containerapp show -g "$RG" -n "$APP" --query properties.configuration.ingress.fqdn -o tsv)
 echo "Deployed: https://$URL/docs"

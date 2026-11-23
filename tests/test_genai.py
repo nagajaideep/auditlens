@@ -35,3 +35,50 @@ def test_eval_set_has_25_questions_and_passes_baseline():
     _, summary = evaluate(_rag(), qs)
     assert summary["retrieval_hit_rate"] >= 0.9
     assert summary["accuracy"] >= 0.8
+
+
+def test_gemini_provider_selected_and_called(monkeypatch):
+    """GeminiLLM is chosen when a key is set and sends system prompt + question (SDK mocked)."""
+    import sys
+    import types as pytypes
+
+    from auditlens.genai import llm as llm_mod
+
+    calls = {}
+
+    class FakeModels:
+        def generate_content(self, model, contents, config):
+            calls.update(model=model, contents=contents, config=config)
+            return pytypes.SimpleNamespace(text="Alerts are triaged within 2 business days [1].", candidates=[])
+
+    class FakeClient:
+        def __init__(self, api_key=None):
+            calls["api_key"] = api_key
+            self.models = FakeModels()
+
+    class FakeConfig:
+        def __init__(self, **kw):
+            self.__dict__.update(kw)
+
+    google_mod = pytypes.ModuleType("google")
+    genai_mod = pytypes.ModuleType("google.genai")
+    genai_mod.Client = FakeClient
+    genai_mod.types = pytypes.SimpleNamespace(GenerateContentConfig=FakeConfig)
+    google_mod.genai = genai_mod
+    monkeypatch.setitem(sys.modules, "google", google_mod)
+    monkeypatch.setitem(sys.modules, "google.genai", genai_mod)
+    monkeypatch.setitem(sys.modules, "google.genai.types", genai_mod.types)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    llm = llm_mod.get_llm("auto")
+    assert isinstance(llm, llm_mod.GeminiLLM)
+    out = llm.complete("SYS", "QUESTION: x")
+    assert "2 business days" in out
+    assert calls["api_key"] == "test-key" and calls["config"].system_instruction == "SYS"
+
+
+def test_no_key_falls_back_to_extractive(monkeypatch):
+    from auditlens.genai import llm as llm_mod
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    assert isinstance(llm_mod.get_llm("auto"), llm_mod.ExtractiveLLM)

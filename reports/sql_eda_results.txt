@@ -1,0 +1,147 @@
+SELECT type,
+       COUNT(*)                              AS n_tx,
+       ROUND(SUM(amount)::numeric, 0)        AS total_amount,
+       ROUND(AVG(amount)::numeric, 2)        AS avg_amount,
+       SUM(isfraud)                          AS n_fraud,
+       ROUND(100.0 * AVG(isfraud), 4)        AS fraud_pct
+FROM transactions_raw
+GROUP BY type
+ORDER BY n_fraud DESC;
+   type   |  n_tx   | total_amount | avg_amount | n_fraud | fraud_pct 
+----------+---------+--------------+------------+---------+-----------
+ CASH_OUT | 2237500 | 394412995224 |  176273.96 |    4116 |    0.1840
+ TRANSFER |  532909 | 485291987263 |  910647.01 |    4097 |    0.7688
+ CASH_IN  | 1399284 | 236367391912 |  168920.24 |       0 |    0.0000
+ DEBIT    |   41432 |    227199221 |    5483.67 |       0 |    0.0000
+ PAYMENT  | 2151495 |  28093371138 |   13057.60 |       0 |    0.0000
+(5 rows)
+
+SELECT (step - 1) % 24 AS hour, COUNT(*) AS n_tx, SUM(isfraud) AS n_fraud,
+       ROUND(100.0 * AVG(isfraud), 4) AS fraud_pct
+FROM transactions_raw GROUP BY 1 ORDER BY 1;
+ hour |  n_tx  | n_fraud | fraud_pct 
+------+--------+---------+-----------
+    0 |  27111 |     358 |    1.3205
+    1 |   9018 |     372 |    4.1251
+    2 |   2007 |     326 |   16.2431
+    3 |   1241 |     274 |   22.0790
+    4 |   1641 |     366 |   22.3035
+    5 |   3420 |     358 |   10.4678
+    6 |   8988 |     328 |    3.6493
+    7 |  26915 |     368 |    1.3673
+    8 | 283518 |     341 |    0.1203
+    9 | 425729 |     375 |    0.0881
+   10 | 445992 |     324 |    0.0726
+   11 | 483418 |     339 |    0.0701
+   12 | 468474 |     346 |    0.0739
+   13 | 439653 |     353 |    0.0803
+   14 | 416686 |     341 |    0.0818
+   15 | 441612 |     345 |    0.0781
+   16 | 439941 |     353 |    0.0802
+   17 | 580509 |     343 |    0.0591
+   18 | 647814 |     342 |    0.0528
+   19 | 553728 |     340 |    0.0614
+   20 | 247806 |     347 |    0.1400
+   21 | 194555 |     351 |    0.1804
+   22 | 141257 |     323 |    0.2287
+   23 |  71587 |     300 |    0.4191
+(24 rows)
+
+SELECT type, COUNT(*) AS violations
+FROM transactions_raw
+WHERE type IN ('TRANSFER','CASH_OUT','PAYMENT','DEBIT')
+  AND ABS(oldbalanceorg - amount - newbalanceorig) > 0.01
+GROUP BY type;
+   type   | violations 
+----------+------------
+ CASH_OUT |    1981123
+ DEBIT    |      11786
+ PAYMENT  |    1101124
+ TRANSFER |     507529
+(4 rows)
+
+SELECT COUNT(*) AS emptied, SUM(isfraud) AS fraud_among_emptied
+FROM transactions_raw
+WHERE oldbalanceorg > 0 AND newbalanceorig = 0 AND amount >= oldbalanceorg;
+ emptied | fraud_among_emptied 
+---------+---------------------
+ 1520581 |                8012
+(1 row)
+
+SELECT namedest, COUNT(*) AS n_in, ROUND(SUM(amount)::numeric, 0) AS inflow, SUM(isfraud) AS fraud_in
+FROM transactions_raw
+WHERE namedest LIKE 'C%'
+GROUP BY namedest
+ORDER BY inflow DESC
+LIMIT 20;
+  namedest   | n_in |  inflow   | fraud_in 
+-------------+------+-----------+----------
+ C439737079  |   18 | 357440831 |        0
+ C707403537  |   17 | 299374418 |        0
+ C167875008  |   28 | 274736433 |        0
+ C20253152   |   20 | 270116189 |        0
+ C172409641  |   57 | 255310174 |        0
+ C268913927  |   35 | 253484588 |        0
+ C936857833  |   46 | 227780012 |        0
+ C65111466   |   22 | 227443846 |        1
+ C744189981  |   26 | 225173862 |        0
+ C1406193485 |   46 | 224778962 |        0
+ C310383504  |   17 | 223503959 |        0
+ C1774146551 |   53 | 213473723 |        0
+ C325534370  |   30 | 208595979 |        0
+ C1320946922 |   16 | 206026465 |        0
+ C2120613885 |   11 | 200164991 |        0
+ C60911281   |   11 | 178642347 |        0
+ C1789550256 |   99 | 177885265 |        0
+ C1087955840 |   21 | 177282998 |        0
+ C907499666  |   14 | 176571590 |        0
+ C294810721  |   17 | 175972189 |        0
+(20 rows)
+
+SELECT day, total, ROUND(AVG(total) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW), 0) AS ma7
+FROM (SELECT (step - 1) / 24 AS day, SUM(amount) AS total FROM transactions_raw GROUP BY 1) d
+ORDER BY day;
+ day |      total      |     ma7     
+-----+-----------------+-------------
+   0 |  92131865625.65 | 92131865626
+   1 |  71238642397.16 | 81685254011
+   2 |    447084472.63 | 54605864165
+   3 |   3830547360.59 | 41912034964
+   4 |   1325133839.05 | 33794654739
+   5 |  73409986368.34 | 40397210011
+   6 |  67070777584.77 | 44207719664
+   7 |  70030598500.48 | 41050395789
+   8 |  58067765398.42 | 39168841932
+   9 |  65190352177.02 | 48417880176
+  10 |  60328661711.60 | 56489039369
+  11 |  57988498474.36 | 64583805745
+  12 | 138673068091.95 | 73907103134
+  13 | 100037360294.78 | 78616614950
+  14 |  77472364656.07 | 79679724401
+  15 |  67890541472.40 | 81082978125
+  16 |  74250134002.80 | 82377232672
+  17 |   3711531300.35 | 74289071185
+  18 |   1936895543.14 | 66281699337
+  19 |   3596373218.52 | 46985028641
+  20 |   4840421321.64 | 33385465931
+  21 |   9515278618.26 | 23677310782
+  22 |   8194745997.95 | 15149340000
+  23 |   5243509370.05 |  5291250767
+  24 |   9177487327.86 |  6072101628
+  25 |   2228709706.33 |  6113789366
+  26 |   1756268796.76 |  5850917306
+  27 |   3006718037.76 |  5588959694
+  28 |   9357636452.07 |  5566439384
+  29 |   1995900406.17 |  4680890014
+  30 |    448086234.84 |  3995829566
+(31 rows)
+
+SELECT SUM(CASE WHEN isflaggedfraud = 1 AND isfraud = 1 THEN 1 ELSE 0 END) AS tp,
+       SUM(CASE WHEN isflaggedfraud = 1 AND isfraud = 0 THEN 1 ELSE 0 END) AS fp,
+       SUM(CASE WHEN isflaggedfraud = 0 AND isfraud = 1 THEN 1 ELSE 0 END) AS fn
+FROM transactions_raw;
+ tp | fp |  fn  
+----+----+------
+ 16 |  0 | 8197
+(1 row)
+

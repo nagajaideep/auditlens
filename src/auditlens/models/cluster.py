@@ -16,14 +16,16 @@ def vendor_profiles(df: pd.DataFrame, min_tx: int = 3) -> pd.DataFrame:
     d = df[df["nameDest"].str.startswith("C")].copy()
     d["night"] = ((d["step"] - 1) % 24) < 6
     d["day"] = (d["step"] - 1) // 24
+    d["is_transfer"] = d["type"] == "TRANSFER"
+    d["is_cash_out"] = d["type"] == "CASH_OUT"
     g = d.groupby("nameDest")
     prof = pd.DataFrame({
         "n_tx": g.size(),
         "mean_amount": g["amount"].mean(),
         "std_amount": g["amount"].std().fillna(0),
         "max_amount": g["amount"].max(),
-        "share_transfer": g["type"].apply(lambda s: (s == "TRANSFER").mean()),
-        "share_cash_out": g["type"].apply(lambda s: (s == "CASH_OUT").mean()),
+        "share_transfer": g["is_transfer"].mean(),
+        "share_cash_out": g["is_cash_out"].mean(),
         "share_night": g["night"].mean(),
         "n_unique_payers": g["nameOrig"].nunique(),
         "active_days": g["day"].nunique(),

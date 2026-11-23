@@ -13,8 +13,14 @@ import pandas as pd
 START = pd.Timestamp("2024-01-01")
 
 
-def spend_series(df: pd.DataFrame, group_col: str = "type", freq: str = "D") -> pd.DataFrame:
-    """Wide frame: index=period, columns=group, values=total amount."""
+def spend_series(df: pd.DataFrame, group_col: str = "type", freq: str = "D",
+                 day_range: tuple[int, int] | None = None) -> pd.DataFrame:
+    """Wide frame: index=period, columns=group, values=total amount.
+    `day_range` (inclusive) restricts the series to a stable window: in real PaySim the
+    simulated volume collapses after day 17, which would make any holdout there meaningless."""
+    if day_range is not None:
+        day = (df["step"] - 1) // 24
+        df = df[(day >= day_range[0]) & (day <= day_range[1])]
     ts = START + pd.to_timedelta(df["step"] - 1, unit="h")
     wide = (df.assign(ts=ts).groupby([pd.Grouper(key="ts", freq=freq), group_col])["amount"].sum()
             .unstack(fill_value=0.0))
@@ -35,15 +41,46 @@ def _season(freq: str) -> int:
     return {"D": 7, "W": 52, "MS": 12, "M": 12, "h": 24, "H": 24}.get(freq, 0)
 
 
-def fit_predict_sarima(y: pd.Series, horizon: int, freq: str = "D") -> pd.DataFrame:
+ORDER_GRID = [(1, 0, 0), (2, 0, 0), (0, 1, 1), (1, 1, 1), (0, 1, 0)]
+
+
+def _fit(y_log: pd.Series, order, seasonal):
     from statsmodels.tsa.statespace.sarimax import SARIMAX
+    trend = "c" if order[1] == 0 and seasonal[1] == 0 else "n"
+    return SARIMAX(y_log, order=order, seasonal_order=seasonal, trend=trend,
+                   enforce_stationarity=False, enforce_invertibility=False).fit(disp=False)
+
+
+def _select_order(y: pd.Series, horizon: int, seasonal) -> tuple:
+    """Pick the order with the lowest MAPE on the last `horizon` points of the training
+    series (an inner validation split), falling back to AIC when the series is too short."""
+    y_log = np.log1p(y)
+    inner = len(y) - horizon >= 6
+    best, best_score = ORDER_GRID[0], np.inf
+    for order in ORDER_GRID:
+        try:
+            if inner:
+                r = _fit(y_log.iloc[:-horizon], order, seasonal)
+                score = mape(y.iloc[-horizon:], np.expm1(r.get_forecast(horizon).predicted_mean))
+            else:
+                score = _fit(y_log, order, seasonal).aic
+        except Exception:  # noqa: BLE001 - some orders fail to converge on short series
+            continue
+        if score < best_score:
+            best, best_score = order, score
+    return best
+
+
+def fit_predict_sarima(y: pd.Series, horizon: int, freq: str = "D") -> pd.DataFrame:
+    """SARIMA on log spend. The (p,d,q) order is chosen on an inner validation split of the
+    training data only (never the holdout); a seasonal term is added when there are >= 2 full seasons."""
     m = _season(freq)
     seasonal = (1, 0, 1, m) if m and len(y) >= 2 * m else (0, 0, 0, 0)
+    y_log = np.log1p(y)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        res = SARIMAX(np.log1p(y), order=(1, 1, 1), seasonal_order=seasonal,
-                      enforce_stationarity=False, enforce_invertibility=False).fit(disp=False)
-        fc = res.get_forecast(horizon)
+        order = _select_order(y, horizon, seasonal)
+        fc = _fit(y_log, order, seasonal).get_forecast(horizon)
     ci = fc.conf_int(alpha=0.2).clip(upper=float(np.log1p(y.max() * 10)))
     idx = pd.date_range(y.index[-1], periods=horizon + 1, freq=freq)[1:]
     return pd.DataFrame({"yhat": np.expm1(fc.predicted_mean.to_numpy()).clip(min=0),

@@ -16,8 +16,8 @@
   credit and AML decisions. Every flag needs an auditor's review (see `docs/policies/model_risk_management.md` §6).
 
 ## Data
-- **Training data:** PaySim (Lopez-Rojas et al., 2016), a *simulated* mobile-money dataset of about 6.3M
-  transactions over 30 days (744 hourly steps), 0.13% fraud. CI and the demo use
+- **Training data:** PaySim (Lopez-Rojas et al., 2016), a *simulated* mobile-money dataset of 6,362,620
+  transactions over 30 days (744 hourly steps), 0.13% fraud, loaded into PostgreSQL. CI and the demo use
   `auditlens.data.generate`, a synthetic generator with the PaySim schema (0.4% fraud).
 - **Split:** chronological, 64% train / 16% validation / 20% test by `step`, so the model is always
   tested on transactions later than any it was trained on.
@@ -37,24 +37,23 @@ defaulting to 0.5. The main ranking metric is PR-AUC, because ROC-AUC flatters m
 ## Metrics
 `reports/model_comparison.csv` and `reports/training_summary.json` are rewritten on every training run.
 
-**Synthetic demo data** (500k rows, 25 Optuna trials). These numbers check that the pipeline runs end
-to end. They are **not** results to quote:
+**Real PaySim**: 6,362,620 transactions, 8,213 frauds. Test set = last 20% of time (1,272,524 rows, 4,254 frauds).
 
 | model | precision | recall | F1 | ROC-AUC | PR-AUC |
 |---|---|---|---|---|---|
-| Random Forest | 1.000 | 0.997 | 0.999 | 1.000 | 1.000 |
-| XGBoost (Optuna) | 0.977 | 0.997 | 0.987 | 1.000 | 1.000 |
-| XGBoost (default) | 0.990 | 0.995 | 0.992 | 1.000 | 1.000 |
-| Logistic regression | 0.950 | 0.388 | 0.551 | 0.992 | 0.538 |
+| Random Forest (selected) | 1.000 | 0.997 | 0.999 | 1.000 | 1.000 |
+| XGBoost (Optuna, 15 trials) | 1.000 | 0.993 | 0.997 | 1.000 | 1.000 |
+| XGBoost (default) | 1.000 | 0.993 | 0.996 | 1.000 | 1.000 |
+| Logistic regression | 0.958 | 0.808 | 0.877 | 0.997 | 0.919 |
 
-Isolation Forest (no labels): ROC-AUC 0.994, catching 70% of fraud at a 0.8% flag rate.
-SARIMA daily spend forecast: 3.2% weighted MAPE over a 7-day holdout.
-RAG offline baseline (TF-IDF retrieval + extractive answers): 92% on the 25-question set.
+Operating threshold 0.82 (picked on validation data to maximise F1): 4,242 true positives, 0 false positives, 12 false negatives.
+Isolation Forest (no labels): ROC-AUC 0.995, 63% of fraud caught at a 0.31% flag rate.
+SARIMA daily spend forecast (days 5–17, 4-day holdout): 4.0% MAPE for CASH_OUT, 5.1% for CASH_IN, median 11.7% across groups.
+Policy Q&A, offline baseline: 92% on the 25-question set.
 
-> Simulated fraud data, PaySim included, follows simple mechanics such as accounts being emptied and
-> balances that don't reconcile, so tree models score close to perfectly on it. That reflects how the
-> simulator works, not how hard real fraud is to detect. Re-run on the real PaySim CSV and report those
-> numbers instead, and expect them to fall sharply on real ledgers.
+> PaySim is simulated, and its fraud follows simple mechanics (the account is emptied, the balances don't
+> reconcile), so tree models score close to perfectly. That reflects how the simulator works, not how hard
+> real fraud is to detect. Expect much lower precision and recall on real ledgers, and re-validate before any use.
 
 ## Explainability and error analysis
 - Global SHAP importance: `reports/shap_importance.csv`; summary plot: `reports/figures/shap_summary.png`.
@@ -77,9 +76,12 @@ RAG offline baseline (TF-IDF retrieval + extractive answers): 92% on the 25-ques
   `extractive` provider keeps everything local.
 
 ## Limitations
-- PaySim is simulated and covers only 30 days, so forecasts are *daily* (weekly seasonality). For multi-year
-  ledgers set `forecast.freq: MS` to forecast monthly.
-- In PaySim, vendors (receiving accounts) look much alike, so cluster separation is weak (silhouette about 0.2).
+- PaySim is simulated and covers only 30 days, and its normal volume collapses after day 17. Forecasts are
+  therefore *daily* over days 5–17, with too little history for weekly seasonality. TRANSFER spend is driven by
+  one-off spikes and is poorly forecast (160% MAPE). For multi-year ledgers set `forecast.freq: MS` and `day_range: null`.
+- In PaySim, vendors (receiving accounts) look much alike, so cluster separation is weak (silhouette 0.26).
+- Recall drops to 77% for senders with a zero opening balance, and the missed frauds are large transfers that
+  leave money in the sender's account. Both are worth targeted testing.
 - The thresholds were tuned on one time window. Monitor drift (PSI above 0.2 on a feature, or more than 30% of
   features drifted) and retrain when it triggers.
 
