@@ -1,0 +1,47 @@
+name: Deploy to Azure
+# Run manually: GitHub -> Actions -> "Deploy to Azure" -> Run workflow.
+# Trains on real PaySim (needs the KAGGLE_API_TOKEN secret), builds the image in Azure Container
+# Registry and deploys it to Azure Container Apps.
+#
+# Repository secrets:   AZURE_CREDENTIALS, KAGGLE_API_TOKEN, GEMINI_API_KEY
+# Repository variables: AZURE_ACR (globally unique lowercase name). Optional: AZURE_RG, AZURE_LOCATION
+on:
+  workflow_dispatch:
+    inputs:
+      sample_rows:
+        description: "Rows to train on ('null' = all 6.3M, about 35 min)"
+        default: "null"
+      trials:
+        description: "Optuna trials"
+        default: "10"
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      MLFLOW_DISABLE_AGENT_HINT: "1"
+      ACR: ${{ vars.AZURE_ACR }}
+      RG: ${{ vars.AZURE_RG || 'auditlens-rg' }}
+      LOC: ${{ vars.AZURE_LOCATION || 'centralindia' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+      - run: pip install -e .
+      - name: Download PaySim
+        env: { KAGGLE_API_TOKEN: "${{ secrets.KAGGLE_API_TOKEN }}" }
+        run: ./scripts/download_paysim.sh
+      - name: Train
+        env: { AUDITLENS_DATA__SAMPLE_ROWS: "${{ inputs.sample_rows }}" }
+        run: auditlens train --trials ${{ inputs.trials }}
+      - uses: actions/upload-artifact@v4
+        with: { name: training-reports, path: reports/ }
+      - uses: azure/login@v2
+        with: { creds: "${{ secrets.AZURE_CREDENTIALS }}" }
+      - name: Build and deploy
+        env: { GEMINI_API_KEY: "${{ secrets.GEMINI_API_KEY }}" }
+        run: ./deploy/azure/containerapps.sh
+      - name: Smoke test
+        run: |
+          URL=$(az containerapp show -g "$RG" -n auditlens-api --query properties.configuration.ingress.fqdn -o tsv)
+          for i in $(seq 1 20); do curl -fs "https://$URL/health" && exit 0; sleep 15; done; exit 1

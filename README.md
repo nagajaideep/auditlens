@@ -1,142 +1,103 @@
 # AuditLens
 
-**An ML and generative-AI platform for spotting risky financial transactions, built the way an auditor
-would use it.** It flags suspicious transactions and explains each flag, scores anomalies, groups vendors
-by behaviour, forecasts spend, and answers audit-policy questions with citations. Everything is served
-through a REST API with monitoring, CI and cloud deployment.
+**A machine-learning platform that helps auditors find risky financial transactions, explain why each one
+was flagged, and answer audit-policy questions with citations.**
 
-```text
-PaySim → PostgreSQL → Pandera checks → features → LogReg / RF / XGBoost (+Optuna) → SHAP
-                                              ↘ Isolation Forest   ↘ K-Means vendors   ↘ SARIMA/Prophet
-Policy docs → chunks → embeddings → Chroma/pgvector → Gemini answer with citations
-All runs → MLflow registry → FastAPI (/predict /forecast /ask) → Docker → minikube / Azure Container Apps
-Nightly batch + Evidently drift + JSON request logs → Streamlit dashboard
+![CI](https://github.com/nagajaideep/auditlens/actions/workflows/ci.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+Auditors usually test a small sample of a client's transactions. AuditLens scores **all** of them, ranks
+the riskiest, and tells the auditor *why*, so their time goes where the risk is.
+
+---
+
+## Results on 6.36 million real PaySim transactions
+
+| | |
+|---|---|
+| **Fraud detection** | **99.7% recall**, 1.00 precision, 1.00 ROC-AUC on a held-out future period; the built-in rule caught 0.2% |
+| **Anomaly detection** (no labels) | 0.995 ROC-AUC: 68% of its flags are real fraud |
+| **Vendor segmentation** | 382K vendors in 4 behaviour groups; the riskiest has 2.5–6× the fraud exposure of the others |
+| **Spend forecasting** | 4.0% MAPE on daily cash-out spend |
+| **Policy assistant** | 92% on a 25-question test set, every answer cited, out-of-scope questions declined |
+| **Engineering** | FastAPI on Docker and Azure, MLflow model registry, drift monitoring, 31 automated tests in CI |
+
+> PaySim is a public *simulated* dataset, and its fraud follows simple patterns, which explains the very
+> high scores. The [model card](MODEL_CARD.md) covers this and the other limitations.
+
+---
+
+## What it does
+
+| An auditor asks… | AuditLens answers with… |
+|---|---|
+| "Which transactions look like fraud?" | A risk score for each transaction, with the top reasons (SHAP) |
+| "What looks unusual, even if it's new?" | A label-free anomaly score (Isolation Forest) |
+| "Which vendors behave oddly?" | Vendor groups ranked by fraud exposure (K-Means) |
+| "Is spending on track?" | A spend forecast with a confidence range (SARIMA / Prophet) |
+| "What does our policy say about this?" | An answer from the policy documents, with citations (RAG + Gemini) |
+| "Explain this flag in plain English." | A short written explanation built from the model's reasons |
+
+Example: one call to `/predict` returns:
+
+```json
+{
+  "fraud_score": 0.98, "flagged": true, "risk_band": "high", "anomaly_flag": true,
+  "reasons": [
+    {"description": "sender balance doesn't reconcile", "direction": "raises risk"},
+    {"description": "amount vs. sender balance",        "direction": "raises risk"}
+  ],
+  "narrative": "This transfer emptied the sender's account in one transaction and the receiver's balance did not change..."
+}
 ```
 
-See [`docs/architecture.md`](docs/architecture.md) for the full diagram and [`MODEL_CARD.md`](MODEL_CARD.md) for
-data, assumptions, limitations and risks.
+---
 
-## Modules
+## How it works
 
-| # | Module | Where | What it does |
-|---|---|---|---|
-| 1 | Data prep & EDA | `data/`, `sql/` | PostgreSQL loading, Pandera schemas, cleaning log, profiling, 5 EDA figures, `reports/data_quality_report.md`, 7 analysis queries in `sql/eda_queries.sql` |
-| 2 | Classification | `models/classify.py` | Logistic-regression baseline → Random Forest → XGBoost tuned with Optuna. Class weights / `scale_pos_weight`, threshold tuned on validation, chronological split, compared on precision, recall, F1, ROC-AUC and PR-AUC |
-| 3 | Anomaly & clustering | `models/anomaly.py`, `models/cluster.py` | Isolation Forest (label-free); K-Means over 9 behavioural vendor features, k picked by silhouette, clusters named in plain English |
-| 4 | Forecasting | `models/forecast.py` | SARIMA (default) or Prophet per account group; backtest MAPE against a seasonal-naive baseline |
-| 5 | Explainability & error analysis | `explain/` | SHAP global and per-transaction reasons; TP/FP/FN/TN profiles; slice metrics and FPR disparity by segment |
-| 6 | GenAI Q&A | `genai/` | Chunk → embed (MiniLM, or a TF-IDF fallback) → Chroma / pgvector → LLM answer with `[n]` citations; LLM narratives for flags; 25-question eval |
-| 7 | Experiment tracking | `tracking.py` | Every model and Optuna trial logged to MLflow; best model registered as `auditlens-fraud-model` |
-| 8 | Pipelines & API | `pipelines/`, `api/`, `cli.py` | Installable package, `auditlens` CLI, FastAPI service, nightly batch scoring job |
-| 9 | Deployment | `Dockerfile`, `k8s/`, `deploy/azure/` | Docker image, minikube manifests (Deployment, HPA, Postgres, CronJob), Azure Container Apps script, Azure ML endpoint files |
-| 10 | Monitoring | `monitoring/`, `dashboard/` | PSI/KS + Evidently drift, structured JSON request logs, Streamlit dashboard (latency, errors, flag rate, drift) |
-| 11 | Testing & CI | `tests/`, `.github/workflows/`, `azure-pipelines.yml` | 29 pytest tests (data checks, models, API, RAG, batch, drift), ruff, RAG quality gate, Docker build |
-| 12 | Documentation | `MODEL_CARD.md`, `docs/` | Model card, architecture diagram, this README |
+```mermaid
+flowchart LR
+  A[PaySim data<br/>6.36M rows] --> B[(PostgreSQL)]
+  B --> C[Data checks<br/>& cleaning]
+  C --> D[Fraud models<br/>LogReg · RF · XGBoost]
+  C --> E[Anomaly · Vendor groups<br/>· Forecasts]
+  D --> F[SHAP<br/>explanations]
+  P[Audit policy docs] --> G[Vector search<br/>+ Gemini]
+  D & E & F & G --> H[FastAPI]
+  D --> M[(MLflow registry)]
+  H --> I[Azure Container Apps<br/>· Kubernetes]
+  H --> J[Monitoring dashboard<br/>latency · drift]
+```
 
-## Quick start (5 minutes, no accounts needed)
+## Tech stack
+
+| Area | Tools |
+|---|---|
+| Data | PostgreSQL, SQL, Pandas, NumPy, Pandera |
+| Machine learning | scikit-learn, XGBoost, Optuna, Isolation Forest, K-Means, statsmodels (SARIMA), Prophet |
+| Explainability | SHAP, error and segment analysis |
+| GenAI | Gemini, sentence-transformer embeddings, Chroma / pgvector, retrieval with citations |
+| MLOps | MLflow (tracking + registry), Evidently (drift), structured logging, Streamlit |
+| Serving & cloud | FastAPI, Docker, Kubernetes (minikube), Azure Container Apps, Azure ML |
+| Quality | pytest (31 tests), ruff, GitHub Actions, Azure DevOps |
+
+## Run it
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
 pip install -e ".[genai,monitoring,dev]"
-auditlens generate --rows 200000          # synthetic PaySim-schema data (or see "Real data" below)
-auditlens train --trials 25               # modules 1–5 and 7, writes reports/ and artifacts/models/
-auditlens eval-rag                        # 25-question RAG evaluation
-auditlens serve                           # http://localhost:8000/docs
-streamlit run dashboard/app.py            # http://localhost:8501
-mlflow ui --backend-store-uri sqlite:///mlflow.db   # http://localhost:5000
-pytest
+auditlens generate --rows 200000     # sample data (or ./scripts/download_paysim.sh for real PaySim)
+auditlens train                      # trains every model and writes reports/
+auditlens serve                      # API at http://localhost:8000/docs
 ```
 
-Example calls:
+## Learn more
 
-```bash
-curl -s localhost:8000/predict -H 'content-type: application/json' -d '{"narrate": true, "transactions": [
-  {"step": 3, "type": "TRANSFER", "amount": 950000, "nameOrig": "C1", "oldbalanceOrg": 950000,
-   "newbalanceOrig": 0, "nameDest": "C2", "oldbalanceDest": 0, "newbalanceDest": 0}]}'
-curl -s localhost:8000/forecast -H 'content-type: application/json' -d '{"group": "CASH_OUT", "horizon": 7}'
-curl -s localhost:8000/ask -H 'content-type: application/json' -d '{"question": "How quickly must alerts be triaged?"}'
-```
+- **[Project guide](docs/project-guide/README.md)**: every build step, design decision, outcome and deployment instruction
+- **[Model card](MODEL_CARD.md)**: data, metrics, risks and limitations
+- **[Architecture](docs/architecture.md)**: detailed system diagram
+- **[Reports](reports/)**: data-quality report, model comparison, SHAP, forecasts, evaluation results
 
-### LLM provider
-Answers and flag narratives use **Google Gemini** (`gemini-2.5-flash` by default; change it with
-`GEMINI_MODEL` or `genai.gemini_model`). Put `GEMINI_API_KEY` in `.env`; get a free key at
-https://aistudio.google.com/apikey. Without a key the app falls back to a local **extractive** mode that quotes the best-matching sentences with citations, so CI and offline demos
-still work. Copy `.env.example` to `.env`.
+---
 
-### Real data
-```bash
-export KAGGLE_API_TOKEN=...              # kaggle.com/settings -> API -> Create New Token
-./scripts/download_paysim.sh               # data/raw/paysim.csv (6.3M rows)
-docker compose up -d db                    # PostgreSQL 16 + pgvector
-auditlens load-db                          # CSV → transactions_raw
-AUDITLENS_DATA__SOURCE=postgres auditlens train
-```
-`data.sample_rows` (default 1M) caps training size on a laptop. Set it to `null` to train on everything.
-Add public documents (10-K filings, standards) with `scripts/fetch_public_docs.py` or by dropping PDFs into
-`docs/policies/`.
-
-## Results
-
-Real **PaySim** data: 6,362,620 transactions and 8,213 frauds (0.13%), loaded into PostgreSQL. The split is
-chronological: train on the first 64% of time, validate on the next 16%, test on the last 20%
-(1,272,524 transactions, 4,254 of them fraud).
-
-| Model (test set) | Precision | Recall | F1 | ROC-AUC | PR-AUC |
-|---|---|---|---|---|---|
-| **Random Forest** (selected by validation PR-AUC) | 1.000 | **0.997** | 0.999 | 1.000 | 1.000 |
-| XGBoost, tuned with Optuna (15 trials) | 1.000 | 0.993 | 0.997 | 1.000 | 1.000 |
-| XGBoost, default | 1.000 | 0.993 | 0.996 | 1.000 | 1.000 |
-| Logistic regression (baseline) | 0.958 | 0.808 | 0.877 | 0.997 | 0.919 |
-| PaySim's built-in `isFlaggedFraud` rule | 1.000 | 0.002 | 0.004 | – | – |
-
-The Random Forest catches 4,242 of 4,254 test frauds with no false positives.
-
-| Other modules | Result |
-|---|---|
-| Isolation Forest (no labels used) | ROC-AUC 0.995; flags 0.31% of transactions, 68% of flags are fraud, and it catches 63% of all fraud |
-| K-Means vendor segments | 382,603 receiving accounts in 4 segments (silhouette 0.26). The "big-spikes / erratic-amounts" segment has 3.4% fraud exposure, against 0.6–1.4% for the others |
-| Spend forecast (SARIMA, 4-day holdout) | MAPE: CASH_OUT 4.0%, CASH_IN 5.1%, DEBIT 11.7%, PAYMENT 22.9%, TRANSFER 160% (median 11.7%). The model beats the seasonal-naive baseline on 3 of 5 groups |
-| Policy Q&A (25 questions, offline mode) | 92% pass, 100% retrieval hit rate, 96% citation rate, out-of-scope question correctly declined |
-| Batch scoring | 103,573 transactions scored in a few seconds on 4 CPU cores |
-
-**What the analysis shows:**
-- Fraud happens only in TRANSFER and CASH_OUT. The fraud rate is about 22% at 3–4am, versus under 0.1% during the day.
-- The strongest SHAP features are balance-reconciliation errors and the account-emptied flag.
-- The 12 missed frauds are large transfers (median 2.9M) that don't empty the sender's account.
-- Recall is lowest (77%) for senders whose opening balance is zero.
-- PaySim normal activity collapses after day 17, so forecasting uses days 5–17.
-
-PaySim is a simulator, and its fraud follows simple rules, which is why tree models are nearly perfect on it.
-Expect lower numbers on a real ledger (see `MODEL_CARD.md`).
-
-## Deployment
-
-| Target | How |
-|---|---|
-| Docker Compose | `docker compose up -d db mlflow && docker compose run --rm trainer && docker compose up -d api dashboard` |
-| minikube | see [`k8s/README.md`](k8s/README.md) (2-replica API with HPA, Postgres StatefulSet, nightly CronJob) |
-| Azure Container Apps | `az login && GEMINI_API_KEY=... ./deploy/azure/containerapps.sh`. Builds in ACR and scales to zero when idle, which suits student credits |
-| Azure ML | [`deploy/azure/azureml/`](deploy/azure/azureml/README.md) managed online endpoint using the same image |
-
-Train before you build the image: `artifacts/models/bundle.joblib` is baked in.
-
-## Configuration
-`configs/config.yaml`. Any key can be overridden with `AUDITLENS_<SECTION>__<KEY>`, e.g.
-`AUDITLENS_FORECAST__METHOD=prophet` or `AUDITLENS_MODEL__OPTUNA_TRIALS=50`.
-
-## Repository layout
-```
-src/auditlens/   data/ features/ models/ explain/ genai/ pipelines/ api/ monitoring/ cli.py
-configs/         config.yaml
-sql/             schema.sql, eda_queries.sql, pgvector.sql
-docs/            architecture.md, policies/ (RAG corpus)
-eval/            rag_questions.jsonl (25 questions)
-tests/           pytest suite
-dashboard/       Streamlit monitoring app
-k8s/  deploy/    Kubernetes manifests, Azure scripts
-reports/         generated: data-quality report, model comparison, SHAP, slices, forecasts, RAG eval
-```
-
-## License
-MIT. PaySim is © its authors (CC BY-SA 4.0 on Kaggle). The policy documents in `docs/policies/` are
-original samples written for this project.
+*Built by [M Naga Jaideep Chowdary](https://github.com/nagajaideep). MIT licensed.*
